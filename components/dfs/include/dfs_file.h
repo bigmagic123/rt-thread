@@ -28,7 +28,7 @@ struct dfs_file_ops
     int (*read)     (struct dfs_fd *fd, void *buf, size_t count);
     int (*write)    (struct dfs_fd *fd, const void *buf, size_t count);
     int (*flush)    (struct dfs_fd *fd);
-    int (*lseek)    (struct dfs_fd *fd, off_t offset);
+    int (*lseek)    (struct dfs_fd *file, rt_off_t offset);
     int (*getdents) (struct dfs_fd *fd, struct dirent *dirp, uint32_t count);
 
     int (*poll)     (struct dfs_fd *fd, struct rt_pollreq *req);
@@ -69,7 +69,8 @@ int dfs_file_rename(const char *oldpath, const char *newpath);
 int dfs_file_ftruncate(struct dfs_fd *fd, off_t length);
 
 /* 0x5254 is just a magic number to make these relatively unique ("RT") */
-#define RT_FIOFTRUNCATE 0x52540000U
+#define RT_FIOFTRUNCATE  0x52540000U
+#define RT_FIOGETXIPADDR 0x52540001U
 
 #ifdef __cplusplus
 }

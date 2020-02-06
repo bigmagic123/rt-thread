@@ -155,7 +155,7 @@ int dfs_romfs_read(struct dfs_fd *file, void *buf, size_t count)
     return length;
 }
 
-int dfs_romfs_lseek(struct dfs_fd *file, off_t offset)
+int dfs_romfs_lseek(struct dfs_fd *file, rt_off_t offset)
 {
     if (offset <= file->size)
     {
