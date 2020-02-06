@@ -96,6 +96,9 @@ const char *dfs_subdir(const char *directory, const char *filename);
 void dfs_lock(void);
 void dfs_unlock(void);
 
+void dfs_fd_lock(void);
+void dfs_fd_unlock(void);
+
 /* FD APIs */
 int fd_new(void);
 struct dfs_fd *fd_get(int fd);
