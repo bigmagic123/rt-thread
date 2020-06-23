@@ -10,6 +10,8 @@
 #ifndef __DRV_SPI_H__
 #define __DRV_SPI_H__
 
+#include "drv_gpio.h"
+
 #define SPI_REG_CS(BASE)            HWREG32(BASE + 0x00)
 #define SPI_REG_FIFO(BASE)          HWREG32(BASE + 0x04)
 #define SPI_REG_CLK(BASE)           HWREG32(BASE + 0x08)
@@ -27,7 +29,7 @@
 #define SPI_CS_RX_FIFO_3_QUARTER        (1 << 19)
 #define SPI_CS_TX_DATA                  (1 << 18)
 #define SPI_CS_RX_DATA                  (1 << 17)
-#define SPI_CS_TX_DONE                  (1 << 16)
+#define SPI_CS_DONE                     (1 << 16)
 #define SPI_CS_LOSSI_EN                 (1 << 13)
 #define SPI_CS_READ_EN                  (1 << 12)
 #define SPI_CS_AUTO_CS                  (1 << 11)
@@ -43,6 +45,42 @@
 #define SPI_CS_CHIP_SELECT_2            (2 << 0)
 #define SPI_CS_CHIP_SELECT_1            (1 << 0)
 #define SPI_CS_CHIP_SELECT_0            (0 << 0)
+
+struct raspi_spi_hw_config
+{
+    rt_uint8_t spi_num;
+    GPIO_PIN   sclk_pin;
+    GPIO_FUNC  sclk_mode;
+    GPIO_PIN   mosi_pin;
+    GPIO_FUNC  mosi_mode;
+    GPIO_PIN   miso_pin;
+    GPIO_FUNC  miso_mode;
+#if defined (BSP_USING_SPI0_DEVICE0) || defined (BSP_USING_SPI1_DEVICE0)
+    GPIO_PIN   ce0_pin;
+    GPIO_FUNC  ce0_mode;
+#endif
+
+#if defined (BSP_USING_SPI0_DEVICE1) || defined (BSP_USING_SPI1_DEVICE1)
+    GPIO_PIN   ce1_pin;
+    GPIO_FUNC  ce1_mode;
+#endif
+
+#if defined (BSP_USING_SPI1_DEVICE2)
+    GPIO_PIN   ce2_pin;
+    GPIO_FUNC  ce2_mode;
+#endif
+    rt_ubase_t hw_base;
+    
+};
+
+struct raspi_spi_device
+{
+    char *device_name;
+    struct rt_spi_bus *spi_bus;
+    struct rt_spi_device *spi_device;
+    struct raspi_spi_hw_config *spi_hw_config;
+    GPIO_PIN cs_pin;
+};
 
 int rt_hw_spi_init(void);
 
