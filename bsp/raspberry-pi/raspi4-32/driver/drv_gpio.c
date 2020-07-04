@@ -126,7 +126,7 @@ void prev_raspi_pin_write(GPIO_PIN pin, int pin_value)
 
     if(num == 0)
     {
-        if(pin_value == 0)
+        if(pin_value == 1)
         {
             GPIO_REG_GPSET0(GPIO_BASE) = 1 << (pin % 32);
         }
@@ -137,7 +137,7 @@ void prev_raspi_pin_write(GPIO_PIN pin, int pin_value)
     }
     else
     {
-        if(pin_value == 0)
+        if(pin_value == 1)
         {
             GPIO_REG_GPSET1(GPIO_BASE) = 1 << (pin % 32);
         }

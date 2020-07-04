@@ -7,11 +7,12 @@
  * Date           Author         Notes
  * 2020-06-22     bigmagic           first version
  */
-#include "drv_spi.h"
-#include "raspi4.h"
 #include <rtthread.h>
 #include <rthw.h>
 #include <rtdevice.h>
+
+#include "raspi4.h"
+#include "drv_spi.h"
 
 #ifdef RT_USING_SPI
 
@@ -56,7 +57,7 @@ static rt_uint8_t raspi_byte_reverse_table[] =
 };
 
 #if defined (BSP_USING_SPI0_BUS)
-#define SPI0_BUS_NAME  "spi0"
+#define SPI0_BUS_NAME      "spi0"
 #define SPI0_DEVICE0_NAME  "spi0.0"
 #define SPI0_DEVICE1_NAME  "spi0.1"
 
@@ -71,34 +72,28 @@ static struct rt_spi_device spi0_device1;
 #endif
 #endif
 
-void spi_gpio_write(rt_uint8_t pin, rt_uint8_t val)
-{
-    prev_raspi_pin_write(pin, val);
-}
-
 static rt_err_t raspi_spi_configure(struct rt_spi_device *device, struct rt_spi_configuration *cfg)
 {
     RT_ASSERT(cfg != RT_NULL);
     RT_ASSERT(device != RT_NULL);
     rt_uint16_t divider;
-    struct raspi_spi_device * hw_config = (struct raspi_spi_device *)device->parent.user_data;
+    struct raspi_spi_device* hw_config = (struct raspi_spi_device *)(device->parent.user_data);
     struct raspi_spi_hw_config *hwcfg = (struct raspi_spi_hw_config *)hw_config->spi_hw_config;
     // spi clear fifo
-    HWREG32(SPI_REG_CS(hwcfg->hw_base)) = (SPI_CS_CLEAR_TX | SPI_CS_CLEAR_RX);
-
+    SPI_REG_CS(hwcfg->hw_base) = (SPI_CS_CLEAR_TX | SPI_CS_CLEAR_RX);
     if(cfg->mode & RT_SPI_CPOL)
     {
-        HWREG32(SPI_REG_CS(hwcfg->hw_base)) |= SPI_CS_CPOL;
+        SPI_REG_CS(hwcfg->hw_base) |= SPI_CS_CPOL;
     }
 
     if(cfg->mode & RT_SPI_CPHA)
     {
-        HWREG32(SPI_REG_CS(hwcfg->hw_base)) |= SPI_CS_CPHA;
+        SPI_REG_CS(hwcfg->hw_base) |= SPI_CS_CPHA;
     }
 
     if(cfg->mode & RT_SPI_CS_HIGH)
     {
-        HWREG32(SPI_REG_CS(hwcfg->hw_base)) |= SPI_CS_CSPOL_HIGH;   
+        SPI_REG_CS(hwcfg->hw_base) |= SPI_CS_CSPOL_HIGH;   
     }
 
     //set clk
@@ -108,7 +103,7 @@ static rt_err_t raspi_spi_configure(struct rt_spi_device *device, struct rt_spi_
     divider = (rt_uint16_t) ((rt_uint32_t) RPI_CORE_CLK_HZ / cfg->max_hz);
     divider &= 0xFFFE;
 
-    HWREG32(SPI_REG_CLK(hwcfg->hw_base)) = divider;
+    SPI_REG_CLK(hwcfg->hw_base) = divider;
 
     return RT_EOK;
 }
@@ -127,69 +122,67 @@ static rt_err_t spi_transfernb(struct raspi_spi_hw_config *hwcfg, rt_uint8_t* tb
     rt_uint32_t RXCnt=0;
     
     /* Clear TX and RX fifos */
-    HWREG32(SPI_REG_CS(hwcfg->hw_base)) |= (SPI_CS_CLEAR_TX | SPI_CS_CLEAR_RX);
+    SPI_REG_CS(hwcfg->hw_base) |= (SPI_CS_CLEAR_TX | SPI_CS_CLEAR_RX);
 
     /* Set TA = 1 */
-    HWREG32(SPI_REG_CS(hwcfg->hw_base)) |= SPI_CS_TA;
+    SPI_REG_CS(hwcfg->hw_base) |= SPI_CS_TA;
 
     /* Use the FIFO's to reduce the interbyte times */
     while ((TXCnt < len) || (RXCnt < len))
     {
         /* TX fifo not full, so add some more bytes */
-        while (((HWREG32(SPI_REG_CS(hwcfg->hw_base)) & SPI_CS_TX_DATA)) && (TXCnt < len))
+        while (((SPI_REG_CS(hwcfg->hw_base) & SPI_CS_TX_DATA)) && (TXCnt < len))
         {
-            //BCM283X_SPI0_FIFO(BCM283X_SPI0_BASE) = correct_order(tbuf[TXCnt],flag);
-
-            HWREG32(SPI_REG_FIFO(hwcfg->hw_base)) = correct_order(tbuf[TXCnt],flag);;
+            SPI_REG_FIFO(hwcfg->hw_base) = correct_order(tbuf[TXCnt],flag);
             TXCnt++;
         }
         /* Rx fifo not empty, so get the next received bytes */
-        while (((HWREG32(SPI_REG_CS(hwcfg->hw_base)) & SPI_CS_RX_DATA)) && (RXCnt < len))
+        while (((SPI_REG_CS(hwcfg->hw_base) & SPI_CS_RX_DATA)) && (RXCnt < len))
         {
-            rbuf[RXCnt] = correct_order(HWREG32(SPI_REG_FIFO(hwcfg->hw_base)), flag);
+            rbuf[RXCnt] = correct_order(SPI_REG_FIFO(hwcfg->hw_base), flag);
             RXCnt++;
         }
     }
     /* Wait for DONE to be set */
-    while (!(HWREG32(SPI_REG_CS(hwcfg->hw_base)) & SPI_CS_DONE));
-
+    while (!(SPI_REG_CS(hwcfg->hw_base) & SPI_CS_DONE));
     /* Set TA = 0, and also set the barrier */
-    HWREG32(SPI_REG_CS(hwcfg->hw_base) |= (0 & SPI_CS_TA));
+    SPI_REG_CS(hwcfg->hw_base) |= (0 & SPI_CS_TA);
     return RT_EOK;
 }
 
 static rt_uint32_t raspi_spi_xfer(struct rt_spi_device *device, struct rt_spi_message *message)
 {
-
+    rt_err_t res;
+    rt_uint8_t flag;
     RT_ASSERT(device != RT_NULL);
     RT_ASSERT(device->bus != RT_NULL);
     RT_ASSERT(device->parent.user_data != RT_NULL);
     RT_ASSERT(message->send_buf != RT_NULL || message->recv_buf != RT_NULL);
 
-    rt_err_t res;
-    rt_uint8_t flag;
     struct rt_spi_configuration config = device->config;
     struct raspi_spi_device * hw_config = (struct raspi_spi_device *)device->parent.user_data;
     GPIO_PIN cs_pin = (GPIO_PIN)hw_config->cs_pin;
     struct raspi_spi_hw_config *hwcfg = (struct raspi_spi_hw_config *)hw_config->spi_hw_config;
 
     if (config.mode & RT_SPI_MSB)
+    {
         flag = 0;
+    }   
     else
+    {
         flag = 1;
-    if (message->cs_take);
-      //  (config.mode & RT_SPI_CS_HIGH)?
-      //          spi_gpio_write(cs_pin, 1):
-      //          spi_gpio_write(cs_pin, 0);
+    }
 
-    /* deal data */
+    if (message->cs_take)
+    {
+        (config.mode & RT_SPI_CS_HIGH)?prev_raspi_pin_write(cs_pin, 1):prev_raspi_pin_write(cs_pin, 0);
+    }
+
     res = spi_transfernb(hwcfg, (rt_uint8_t *)message->send_buf, (rt_uint8_t *)message->recv_buf, (rt_int32_t)message->length, flag);
-
     if (message->cs_release)
-        (config.mode & RT_SPI_CS_HIGH)?
-                spi_gpio_write(cs_pin, 0):
-                spi_gpio_write(cs_pin, 1);
-
+    {
+        (config.mode & RT_SPI_CS_HIGH)?prev_raspi_pin_write(cs_pin, 0):prev_raspi_pin_write(cs_pin, 1);
+    }
     if (res != RT_EOK)
            return RT_ERROR;
 
@@ -209,7 +202,6 @@ rt_err_t raspi_spi_hw_init(struct raspi_spi_hw_config *hwcfg)
     prev_raspi_pin_mode(hwcfg->sclk_pin, hwcfg->sclk_mode);
     prev_raspi_pin_mode(hwcfg->miso_pin, hwcfg->miso_mode);
     prev_raspi_pin_mode(hwcfg->mosi_pin, hwcfg->mosi_mode);
-
 #if defined (BSP_USING_SPI0_DEVICE0)
     prev_raspi_pin_mode(hwcfg->ce0_pin, hwcfg->ce0_mode);
 #endif
@@ -218,16 +210,16 @@ rt_err_t raspi_spi_hw_init(struct raspi_spi_hw_config *hwcfg)
     prev_raspi_pin_mode(hwcfg->ce1_pin, hwcfg->ce1_mode);
 #endif
     //clear rx and tx
-    HWREG32(SPI_REG_CS(hwcfg->hw_base)) = (SPI_CS_CLEAR_TX | SPI_CS_CLEAR_RX);
+    SPI_REG_CS(hwcfg->hw_base) = (SPI_CS_CLEAR_TX | SPI_CS_CLEAR_RX);
     //enable chip select
 #if defined (BSP_USING_SPI0_DEVICE0)
-    HWREG32(SPI_REG_CS(hwcfg->hw_base)) |= SPI_CS_CHIP_SELECT_0;
+    SPI_REG_CS(hwcfg->hw_base) |= SPI_CS_CHIP_SELECT_0;
 #endif
 
 #if defined (BSP_USING_SPI0_DEVICE1)
-    HWREG32(SPI_REG_CS(hwcfg->hw_base)) |= SPI_CS_CHIP_SELECT_1;
+    SPI_REG_CS(hwcfg->hw_base) |= SPI_CS_CHIP_SELECT_1;
 #endif
-
+    
 #if defined (BSP_USING_SPI0_DEVICE0) && defined (BSP_USING_SPI0_DEVICE1)
     HWREG32(SPI_REG_CS(hwcfg->hw_base)) |= (SPI_CS_CHIP_SELECT_0 | SPI_CS_CHIP_SELECT_1);
 #endif
@@ -263,33 +255,38 @@ struct raspi_spi_hw_config raspi_spi0_hw =
 };
 #endif
 
+#if defined (BSP_USING_SPI0_DEVICE0)
+struct raspi_spi_device raspi_spi0_device0 =
+{
+    .device_name = SPI0_DEVICE0_NAME,
+    .spi_bus = &spi0_bus,
+    .spi_device = &spi0_device0,
+    .spi_hw_config = &raspi_spi0_hw,
+    .cs_pin = GPIO_PIN_8,
+};
+#endif
+
+#if defined (BSP_USING_SPI0_DEVICE1)
+struct raspi_spi_device raspi_spi0_device1 =
+{
+    .device_name = SPI0_DEVICE1_NAME,
+    .spi_bus = &spi0_bus,
+    .spi_device = &spi0_device1,
+    .cs_pin = GPIO_PIN_7,
+};
+#endif
+
 int rt_hw_spi_init(void)
 {
-
 #if defined (BSP_USING_SPI0_BUS)
     raspi_spi_hw_init(&raspi_spi0_hw);
     rt_spi_bus_register(&spi0_bus, SPI0_BUS_NAME, &raspi_spi_ops);
 
 #if defined (BSP_USING_SPI0_DEVICE0)
-    struct raspi_spi_device raspi_spi0_device0 =
-    {
-        .device_name = SPI0_DEVICE0_NAME,
-        .spi_bus = &spi0_bus,
-        .spi_device = &spi0_device0,
-        .spi_hw_config = &raspi_spi0_hw,
-        .cs_pin = raspi_spi0_hw.ce0_pin,
-    };
     raspi_spi_bus_attach_device(SPI0_BUS_NAME, &raspi_spi0_device0);
 #endif
 
 #if defined (BSP_USING_SPI0_DEVICE1)
-    struct raspi_spi_device raspi_spi0_device1 =
-    {
-        .device_name = SPI0_DEVICE1_NAME,
-        .spi_bus = &spi0_bus,
-        .spi_device = &spi0_device1,
-        .cs_pin = raspi_spi0_hw.ce1_pin,
-    };
     raspi_spi_bus_attach_device(SPI0_BUS_NAME, &raspi_spi0_device1);
 #endif
 #endif
