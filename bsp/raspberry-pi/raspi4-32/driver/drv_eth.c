@@ -19,6 +19,12 @@
 #include "raspi4.h"
 #include "drv_eth.h"
 
+#define DBG_LEVEL   DBG_LOG
+#include <rtdbg.h>
+#define LOG_TAG                "drv.eth"
+
+static int link_speed = 0;
+
 #define RECV_CACHE_BUF          (1024)
 #define SEND_DATA_NO_CACHE      (0x08200000)
 #define RECV_DATA_NO_CACHE      (0x08400000)
@@ -33,6 +39,11 @@
 #define lower_32_bits(n)        ((rt_uint32_t)(n))
 
 #define BIT(nr)                 (1UL << (nr))
+
+static rt_thread_t link_thread_tid = RT_NULL;
+#define LINK_THREAD_STACK_SIZE   (1024)
+#define LINK_THREAD_PRIORITY     (20)
+#define LINK_THREAD_TIMESLICE    (10)
 
 static rt_uint32_t tx_index = 0;
 static rt_uint32_t rx_index = 0;
@@ -54,6 +65,7 @@ struct rt_eth_dev
 };
 static struct rt_eth_dev eth_dev;
 static struct rt_semaphore sem_lock;
+static struct rt_semaphore link_ack;
 
 static inline rt_uint32_t read32(void *addr)
 {
@@ -209,7 +221,7 @@ static int get_ethernet_uid(void)
 
     if(BCM54213PE_VERSION_B1 == uid)
     {
-        rt_kprintf("version is B1\n");
+        LOG_I("version is B1\n");
     }
     return uid;
 }
@@ -291,46 +303,10 @@ static void rx_descs_init(void)
     }
 }
 
-static int phy_startup(void)
-{
-    int count = 1000000;
-    while ((bcmgenet_mdio_read(1, BCM54213PE_MII_STATUS) & MII_STATUS_LINK_UP) && (--count))
-    DELAY_MICROS(1);
-    if(count > 0)
-    {
-        rt_kprintf("bcmgenet: PHY startup ok!\n");
-    }
-    else
-    {
-        rt_kprintf("bcmgenet: PHY startup err!\n");
-        return 1;
-    }
-
-    if(bcmgenet_mdio_read(1, BCM54213PE_STATUS) == 0)
-    {
-        //todo
-    }
-    else
-    {
-        rt_kprintf("bcmgenet: BCM54213PE_STATUS err!\n");
-    }
-
-    if(bcmgenet_mdio_read(1, BCM54213PE_CONTROL) == (CONTROL_FULL_DUPLEX_CAPABILITY| CONTROL_HALF_DUPLEX_CAPABILITY))
-    {
-        //todo
-    }
-    else
-    {
-        rt_kprintf("bcmgenet: BCM54213PE_CONTROL err!\n");
-    }
-
-    return 0;
-}
-
 static int bcmgenet_adjust_link(void)
 {
     rt_uint32_t speed;
-    rt_uint32_t phy_dev_speed = SPEED_100;
+    rt_uint32_t phy_dev_speed = link_speed;
     
     switch (phy_dev_speed) {
     case SPEED_1000:
@@ -358,6 +334,14 @@ static int bcmgenet_adjust_link(void)
     return 0;
 }
 
+void link_irq(void *param)
+{
+    if((bcmgenet_mdio_read(1, BCM54213PE_MII_STATUS) & MII_STATUS_LINK_UP) != 0)
+    {
+        rt_sem_release(&link_ack);
+    }
+}
+
 static int bcmgenet_gmac_eth_start(void)
 {
     rt_uint32_t ret;
@@ -374,13 +358,6 @@ static int bcmgenet_gmac_eth_start(void)
 
     /* Enable RX/TX DMA */
     bcmgenet_enable_dma();
-
-    /* read PHY properties over the wire from generic PHY set-up */
-    ret = phy_startup();
-    if (ret) {
-        rt_kprintf("bcmgenet: PHY startup failed: %d\n", ret);
-        return ret;
-    }
 
     /* Update MAC registers based on PHY property */
     ret = bcmgenet_adjust_link();
@@ -493,14 +470,63 @@ static int bcmgenet_gmac_eth_send(void *packet, int length)
     return 0;
 }
 
+static void link_task_entry(void *param)
+{   
+    struct eth_device *eth_device = (struct eth_device *)param;
+    RT_ASSERT(eth_device != RT_NULL);
+    struct rt_eth_dev *dev = &eth_dev;
+    //start mdio
+    bcmgenet_mdio_init();
+    //start timer link
+    rt_timer_init(&dev->link_timer, "link_timer",
+                  link_irq,
+                  NULL,
+                  100,
+                  RT_TIMER_FLAG_PERIODIC);
+    rt_timer_start(&dev->link_timer);
+
+    //link wait forever
+    rt_sem_take(&link_ack, RT_WAITING_FOREVER);
+    eth_device_linkchange(&eth_dev.parent, RT_TRUE);//link up
+    rt_timer_stop(&dev->link_timer);
+
+    //set mac
+    bcmgenet_gmac_write_hwaddr();
+    bcmgenet_gmac_write_hwaddr();
+
+    //check link speed
+    if((bcmgenet_mdio_read(1, BCM54213PE_STATUS) & (1 << 10)) || (bcmgenet_mdio_read(1, BCM54213PE_STATUS) & (1 << 11)))
+    {
+        link_speed = 1000;
+        rt_kprintf("Support link mode Speed 1000M\n");
+    }
+    else if((bcmgenet_mdio_read(1, 0x05) & (1 << 7)) || (bcmgenet_mdio_read(1, 0x05) & (1 << 8))  || (bcmgenet_mdio_read(1, 0x05) & (1 << 9)))
+    {
+        link_speed = 100;
+        rt_kprintf("Support link mode Speed 100M\n");
+    }
+    else
+    {
+        link_speed = 10;
+        rt_kprintf("Support link mode Speed 10M\n");
+    }
+
+    bcmgenet_gmac_eth_start();
+    //irq or poll
+    rt_timer_init(&dev->rx_poll_timer, "rx_poll_timer",
+                  eth_rx_irq,
+                  NULL,
+                  1,
+                  RT_TIMER_FLAG_PERIODIC);
+
+    rt_timer_start(&dev->rx_poll_timer);
+}
+
 static rt_err_t bcmgenet_eth_init(rt_device_t device)
 {
-    struct eth_device *eth_device = (struct eth_device *)device;
-    RT_ASSERT(eth_device != RT_NULL);
     rt_uint32_t ret = 0;
     rt_uint32_t hw_reg = 0;
-    struct rt_eth_dev *dev = &eth_dev;
-    
+
     /* Read GENET HW version */
     rt_uint8_t major = 0;
     hw_reg = read32(MAC_REG + SYS_REV_CTRL);
@@ -530,21 +556,11 @@ static rt_err_t bcmgenet_eth_init(rt_device_t device)
     /* issue soft reset with (rg)mii loopback to ensure a stable rxclk */
     write32(MAC_REG + UMAC_CMD, CMD_SW_RESET | CMD_LCL_LOOP_EN);
 
-    bcmgenet_mdio_init();
-
-    bcmgenet_gmac_write_hwaddr();
-    bcmgenet_gmac_write_hwaddr();
-
-    bcmgenet_gmac_eth_start();
-
-    //irq or poll
-    rt_timer_init(&dev->rx_poll_timer, "rx_poll_timer",
-                  eth_rx_irq,
-                  NULL,
-                  1,
-                  RT_TIMER_FLAG_PERIODIC);
-
-    rt_timer_start(&dev->rx_poll_timer);
+    link_thread_tid = rt_thread_create("link",link_task_entry, (void *)device,
+                            LINK_THREAD_STACK_SIZE,
+                            LINK_THREAD_PRIORITY, LINK_THREAD_TIMESLICE);
+    if (link_thread_tid != RT_NULL)
+        rt_thread_startup(link_thread_tid);
 
     return RT_EOK;
 }
@@ -568,7 +584,6 @@ rt_err_t rt_eth_tx(rt_device_t device, struct pbuf *p)
     rt_uint32_t sendbuf = SEND_DATA_NO_CACHE;
     /* lock eth device */
     rt_sem_take(&sem_lock, RT_WAITING_FOREVER);
-    //struct rt_eth_dev *dev = (struct rt_eth_dev *) device;
     pbuf_copy_partial(p, (void *)&send_cache_pbuf[0], p->tot_len, 0);
     rt_memcpy((void *)sendbuf, send_cache_pbuf, p->tot_len);
 
@@ -601,11 +616,11 @@ int rt_hw_eth_init(void)
     rt_uint8_t mac_addr[6];
     
     rt_sem_init(&sem_lock, "eth_lock", 1, RT_IPC_FLAG_FIFO);
+    rt_sem_init(&link_ack, "link_ack", 0, RT_IPC_FLAG_FIFO);
 
     memset(&eth_dev, 0, sizeof(eth_dev));
     memset((void *)SEND_DATA_NO_CACHE, 0, sizeof(DMA_DISC_ADDR_SIZE));
     memset((void *)RECV_DATA_NO_CACHE, 0, sizeof(DMA_DISC_ADDR_SIZE));
-
     bcm271x_mbox_hardware_get_mac_address(&mac_addr[0]);
 
     eth_dev.iobase = MAC_REG;
@@ -629,9 +644,8 @@ int rt_hw_eth_init(void)
     eth_dev.parent.eth_tx            = rt_eth_tx;
     eth_dev.parent.eth_rx            = rt_eth_rx;
 
-
     eth_device_init(&(eth_dev.parent), "e0");
-    eth_device_linkchange(&eth_dev.parent, RT_TRUE);   //linkup the e0 for lwip to check
+    eth_device_linkchange(&eth_dev.parent, RT_FALSE);   //link down
     return 0;
 }
 INIT_COMPONENT_EXPORT(rt_hw_eth_init);
