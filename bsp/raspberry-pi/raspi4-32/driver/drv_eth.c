@@ -24,6 +24,7 @@
 #define LOG_TAG                "drv.eth"
 
 static int link_speed = 0;
+static int link_flag = 0;
 
 #define RECV_CACHE_BUF          (1024)
 #define SEND_DATA_NO_CACHE      (0x08200000)
@@ -520,6 +521,8 @@ static void link_task_entry(void *param)
                   RT_TIMER_FLAG_PERIODIC);
 
     rt_timer_start(&dev->rx_poll_timer);
+
+    link_flag = 1;
 }
 
 static rt_err_t bcmgenet_eth_init(rt_device_t device)
@@ -583,12 +586,15 @@ rt_err_t rt_eth_tx(rt_device_t device, struct pbuf *p)
 {
     rt_uint32_t sendbuf = SEND_DATA_NO_CACHE;
     /* lock eth device */
-    rt_sem_take(&sem_lock, RT_WAITING_FOREVER);
-    pbuf_copy_partial(p, (void *)&send_cache_pbuf[0], p->tot_len, 0);
-    rt_memcpy((void *)sendbuf, send_cache_pbuf, p->tot_len);
+    if(link_flag == 1)
+    {
+        rt_sem_take(&sem_lock, RT_WAITING_FOREVER);
+        pbuf_copy_partial(p, (void *)&send_cache_pbuf[0], p->tot_len, 0);
+        rt_memcpy((void *)sendbuf, send_cache_pbuf, p->tot_len);
 
-    bcmgenet_gmac_eth_send((void *)sendbuf, p->tot_len);
-    rt_sem_release(&sem_lock);
+        bcmgenet_gmac_eth_send((void *)sendbuf, p->tot_len);
+        rt_sem_release(&sem_lock);
+    }
     return RT_EOK;
 }
 
@@ -598,16 +604,19 @@ struct pbuf *rt_eth_rx(rt_device_t device)
     int recv_len = 0;
     rt_uint32_t addr_point[8];
     struct pbuf *pbuf = RT_NULL;
-    rt_sem_take(&sem_lock, RT_WAITING_FOREVER);
-
-    recv_len = bcmgenet_gmac_eth_recv((rt_uint8_t **)&addr_point[0]);
-
-    if(recv_len > 0)
+    if(link_flag == 1)
     {
-        pbuf = pbuf_alloc(PBUF_LINK, recv_len, PBUF_RAM);
-        rt_memcpy(pbuf->payload, (char *)addr_point[0], recv_len);
+        rt_sem_take(&sem_lock, RT_WAITING_FOREVER);
+
+        recv_len = bcmgenet_gmac_eth_recv((rt_uint8_t **)&addr_point[0]);
+
+        if(recv_len > 0)
+        {
+            pbuf = pbuf_alloc(PBUF_LINK, recv_len, PBUF_RAM);
+            rt_memcpy(pbuf->payload, (char *)addr_point[0], recv_len);
+        }
+        rt_sem_release(&sem_lock);
     }
-    rt_sem_release(&sem_lock);
     return pbuf;
 }
 
