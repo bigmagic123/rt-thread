@@ -104,7 +104,7 @@ rt_err_t sd_int(struct sdhci_pdata_t * pdat, rt_uint32_t mask)
         write32(pdat->virt + EMMC_INTERRUPT, r);
         //qemu maybe can not use sdcard
         //rt_kprintf("send cmd/data timeout wait for %x int: %x, status: %x\n",mask, r, read32(pdat->virt + EMMC_STATUS));
-        //return -RT_ETIMEOUT;
+        return -RT_ETIMEOUT;
     }
     else if (r & INT_ERROR_MASK)
     {
@@ -634,7 +634,7 @@ int raspi_sdmmc_init(void)
     host->max_seg_size = 2048;
     host->max_dma_segs = 10;
     host->max_blk_size = 512;
-    host->max_blk_count = 4096;
+    host->max_blk_count = 1;
 
     host->private_data = sdhci;
 
