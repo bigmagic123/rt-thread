@@ -106,6 +106,7 @@
 #define RT_MMCSD_MAX_PARTITION 16
 #define RT_USING_SPI
 #define RT_USING_WDT
+#define RT_USING_TOUCH
 
 /* Using USB */
 
@@ -237,21 +238,26 @@
 #define BSP_USING_UART
 #define RT_USING_UART0
 #define RT_USING_UART3
-#define RT_USING_UART4
+#define RT_USING_UART5
 #define BSP_USING_GIC
 #define BSP_USING_GIC400
 #define BSP_USING_PIN
 #define BSP_USING_SPI
 #define BSP_USING_SPI0_BUS
 #define BSP_USING_SPI0_DEVICE0
+#define BSP_USING_SPI0_DEVICE1
 #define BSP_USING_CORETIMER
 #define BSP_USING_WDT
 #define BSP_USING_SDIO
 #define BSP_USING_SDIO0
+#define BSP_USING_ETH
 
 /* Board Peripheral Drivers */
 
+#define BSP_USING_LCD
 #define BSP_USING_HDMI
-#define BSP_USING_HDMI_DISPLAY
+#define BSP_USING_ILI9486
+#define BSP_USING_TOUCH
+#define BSP_USING_XPT2046
 
 #endif

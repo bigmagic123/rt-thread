@@ -116,17 +116,37 @@ menu "Hardware Drivers Config"
                 select RT_USING_SDIO
                 default n
         endif
+
+        config BSP_USING_ETH
+            bool "Enable ETH"
+            select RT_USING_ETH
+            default n
     endmenu
 
     menu "Board Peripheral Drivers"
-        menuconfig BSP_USING_HDMI
-            bool "Enable HDMI"
-            default n
+        menuconfig BSP_USING_LCD
+            bool "Enable LCD"
+            select RT_USING_LCD
+            default y
+        if BSP_USING_LCD
+            config BSP_USING_HDMI
+                bool "Enable HDMI"
+                default y
 
-        if BSP_USING_HDMI
-            config BSP_USING_HDMI_DISPLAY
-                bool "HDMI DISPLAY"
-                default n
+            config BSP_USING_ILI9486
+                bool "Enable ILI9486 LCD"
+                default y
+        endif
+
+        menuconfig BSP_USING_TOUCH
+            bool "Enable TOUCH"
+            select RT_USING_TOUCH
+            default y
+
+        if BSP_USING_TOUCH
+            config BSP_USING_XPT2046
+                bool "Enable XPT2046 TOUCH"
+                default y
         endif
     endmenu
 endmenu
