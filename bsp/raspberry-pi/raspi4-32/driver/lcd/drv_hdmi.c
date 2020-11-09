@@ -300,7 +300,7 @@ int hdmi_fb_init(void)
     _hdmi.pixel_format = RTGRAPHIC_PIXEL_FORMAT_RGB888;
 
     //rt_kprintf("_hdmi.fb is %p\n", _hdmi.fb);
-    rt_hdmi_fb_device_init(&_hdmi, "lcd");
+    rt_hdmi_fb_device_init(&_hdmi, "hdmi");
 
     return 0;
 }
