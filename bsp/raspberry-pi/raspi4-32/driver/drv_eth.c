@@ -18,6 +18,7 @@
 #include "mbox.h"
 #include "raspi4.h"
 #include "drv_eth.h"
+#include "drv_timer.h"
 
 //#define ETH_RX_POLL
 
@@ -128,12 +129,12 @@ static void bcmgenet_umac_reset(void)
     reg &= ~BIT(1);
     write32((MAC_REG + SYS_RBUF_FLUSH_CTRL), reg);
 
-    DELAY_MICROS(10);
+    usleep_delay(10*1000);
     write32((MAC_REG + SYS_RBUF_FLUSH_CTRL), 0);
-    DELAY_MICROS(10);
+    usleep_delay(10*1000);
     write32(MAC_REG + UMAC_CMD, 0);
     write32(MAC_REG + UMAC_CMD, (CMD_SW_RESET | CMD_LCL_LOOP_EN));
-    DELAY_MICROS(2);
+    usleep_delay(2);
     write32(MAC_REG + UMAC_CMD, 0);
     /* clear tx/rx counter */
     write32(MAC_REG + UMAC_MIB_CTRL, MIB_RESET_RX | MIB_RESET_TX | MIB_RESET_RUNT);
@@ -157,7 +158,7 @@ static void bcmgenet_disable_dma(void)
     rdma_reg &= ~(1UL << DMA_EN);
     write32(MAC_REG + RDMA_REG_BASE + DMA_CTRL, rdma_reg);
     write32(MAC_REG + UMAC_TX_FLUSH, 1);
-    DELAY_MICROS(100);
+    usleep_delay(100);
     write32(MAC_REG + UMAC_TX_FLUSH, 0);
 }
 
@@ -185,7 +186,7 @@ static int bcmgenet_mdio_write(rt_uint32_t addr, rt_uint32_t reg, rt_uint32_t va
     write32(MAC_REG + MDIO_CMD, reg_val);
 
     while ((read32(MAC_REG + MDIO_CMD) & MDIO_START_BUSY) && (--count))
-        DELAY_MICROS(1);
+        usleep_delay(100);
 
     reg_val = read32(MAC_REG + MDIO_CMD);
 
@@ -206,7 +207,7 @@ static int bcmgenet_mdio_read(rt_uint32_t addr, rt_uint32_t reg)
     write32(MAC_REG + MDIO_CMD, reg_val);
 
     while ((read32(MAC_REG + MDIO_CMD) & MDIO_START_BUSY) && (--count))
-        DELAY_MICROS(1);
+        usleep_delay(100);
 
     reg_val = read32(MAC_REG + MDIO_CMD);
 
@@ -352,7 +353,7 @@ static int bcmgenet_adjust_link(void)
     //rt_kprintf("OOB_DISABLE is %d\n", OOB_DISABLE);
     reg1 |= (RGMII_LINK | RGMII_MODE_EN | ID_MODE_DIS);
     write32(MAC_REG + EXT_RGMII_OOB_CTRL, reg1);
-    DELAY_MICROS(1000);
+    usleep_delay(1000);
     write32(MAC_REG + UMAC_CMD, speed << CMD_SPEED_SHIFT);
     return 0;
 }
@@ -392,7 +393,7 @@ static int bcmgenet_gmac_eth_start(void)
 
     /* wait tx index clear */
     while ((read32(MAC_REG + TDMA_CONS_INDEX) != 0) && (--count))
-        DELAY_MICROS(1);
+        usleep_delay(100);
 
     tx_index = read32(MAC_REG + TDMA_CONS_INDEX);
     write32(MAC_REG + TDMA_PROD_INDEX, tx_index);

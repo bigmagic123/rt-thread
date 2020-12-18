@@ -11,6 +11,7 @@
 #include "mbox.h"
 #include "raspi4.h"
 #include "drv_sdio.h"
+#include "drv_timer.h"
 
 static rt_uint32_t mmc_base_clock = 0;
 
@@ -97,7 +98,7 @@ rt_err_t sd_int(struct sdhci_pdata_t * pdat, rt_uint32_t mask)
     rt_uint32_t m = mask | INT_ERROR_MASK;
     int cnt = 1000000;
     while (!(read32(pdat->virt + EMMC_INTERRUPT) & (m | INT_ERROR_MASK)) && cnt--)
-        DELAY_MICROS(1);
+        usleep_delay(1000);
     r = read32(pdat->virt + EMMC_INTERRUPT);
     if (cnt <= 0 || (r & INT_CMD_TIMEOUT) || (r & INT_DATA_TIMEOUT))
     {
@@ -120,7 +121,7 @@ rt_err_t sd_status(struct sdhci_pdata_t * pdat, unsigned int mask)
 {
     int cnt = 500000;
     while ((read32(pdat->virt + EMMC_STATUS) & mask) && !(read32(pdat->virt + EMMC_INTERRUPT) & INT_ERROR_MASK) && cnt--)
-        DELAY_MICROS(1);
+        usleep_delay(100);
     if (cnt <= 0)
     {
         return -RT_ETIMEOUT;
@@ -156,9 +157,9 @@ static rt_err_t raspi_transfer_command(struct sdhci_pdata_t * pdat, struct sdhci
     write32(pdat->virt + EMMC_ARG1, cmd->cmdarg);
     write32(pdat->virt + EMMC_CMDTM, cmdidx);
     if (cmd->cmdidx == SD_APP_OP_COND)
-        DELAY_MICROS(1000);
+        usleep_delay(1000);
     else if ((cmd->cmdidx == SD_SEND_IF_COND) || (cmd->cmdidx == APP_CMD))
-        DELAY_MICROS(100);
+        usleep_delay(100);
 
     ret = sd_int(pdat, INT_CMD_DONE);
     if (ret)
@@ -433,7 +434,7 @@ static rt_err_t sdhci_setclock(struct sdhci_t * sdhci, rt_uint32_t clock)
     struct sdhci_pdata_t * pdat = (struct sdhci_pdata_t *)(sdhci->priv);
 
     while ((read32(pdat->virt + EMMC_STATUS) & (SR_CMD_INHIBIT | SR_DAT_INHIBIT)) && (--count))
-        DELAY_MICROS(1);
+        usleep_delay(100);
     if (count <= 0)
     {
         rt_kprintf("EMMC: Set clock: timeout waiting for inhibit flags. Status %08x.\n",read32(pdat->virt + EMMC_STATUS));
@@ -444,7 +445,7 @@ static rt_err_t sdhci_setclock(struct sdhci_t * sdhci, rt_uint32_t clock)
     temp = read32((pdat->virt + EMMC_CONTROL1));
     temp &= ~C1_CLK_EN;
     write32((pdat->virt + EMMC_CONTROL1),temp);
-    DELAY_MICROS(10);
+    usleep_delay(100);
     // Request the new clock setting and enable the clock
     temp = read32(pdat->virt + EMMC_SLOTISR_VER);
     sdHostVer = (temp & HOST_SPEC_NUM) >> HOST_SPEC_NUM_SHIFT;
@@ -456,18 +457,18 @@ static rt_err_t sdhci_setclock(struct sdhci_t * sdhci, rt_uint32_t clock)
 
     temp = (temp & 0xffff003f) | cdiv;
     write32((pdat->virt + EMMC_CONTROL1),temp);
-    DELAY_MICROS(10);
+    usleep_delay(100);
 
     // Enable the clock.
     temp = read32(pdat->virt + EMMC_CONTROL1);
     temp |= C1_CLK_EN;
     write32((pdat->virt + EMMC_CONTROL1),temp);
-    DELAY_MICROS(10);
+    usleep_delay(100);
 
     // Wait for clock to be stable.
     count = 10000;
     while (!(read32(pdat->virt + EMMC_CONTROL1) & C1_CLK_STABLE) && count--)
-        DELAY_MICROS(10);
+        usleep_delay(100);
     if (count <= 0)
     {
         rt_kprintf("EMMC: ERROR: failed to get stable clock %d.\n", clock);
@@ -508,7 +509,7 @@ static rt_err_t reset_emmc(struct sdhci_pdata_t * pdat)
     int cnt = 10000;
     do
     {
-        DELAY_MICROS(10);
+        usleep_delay(100);
         cnt = cnt - 1;
         if(cnt == 0)
         {
@@ -530,7 +531,7 @@ static rt_err_t reset_emmc(struct sdhci_pdata_t * pdat)
     cnt = 10000;
     do
     {
-        DELAY_MICROS(10);
+        usleep_delay(10*1000);
         cnt = cnt - 1;
         if(cnt == 0)
         {
