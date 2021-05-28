@@ -12,10 +12,12 @@
 #include <rthw.h>
 #include <stdio.h>
 #include <string.h>
+#include <msh.h>
 
 int main(void)
 {
-    printf("Hello RISC-V!\n");
-
+    rt_kprintf("Hello RISC-V!\n");
+    char* dns_info = "dns e0 0 114.114.114.114";
+    msh_exec(dns_info,rt_strlen(dns_info));
     return 0;
 }
