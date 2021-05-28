@@ -35,7 +35,15 @@ void plic_set_priority(int irq, int priority)
 void plic_irq_enable(int irq)
 {
     int hart = r_mhartid();
-    *(uint32_t*)PLIC_ENABLE(hart) = ((*(uint32_t*)PLIC_ENABLE(hart)) | (1 << irq));
+    if(irq < 32)
+    {
+        *(uint32_t*)PLIC_ENABLE(hart) = ((*(uint32_t*)PLIC_ENABLE(hart)) | (1 << irq));
+    }
+    else
+    {
+        irq = irq - 32;
+        *(uint32_t*)PLIC_ENABLE1(hart) = ((*(uint32_t*)PLIC_ENABLE1(hart)) | (1 << irq));
+    }
 #ifdef  RISCV_S_MODE
     set_csr(sie, read_csr(sie) | MIP_SEIP);
 #else
@@ -46,9 +54,16 @@ void plic_irq_enable(int irq)
 void plic_irq_disable(int irq)
 {
     int hart = r_mhartid();
-    *(uint32_t*)PLIC_ENABLE(hart) = (((*(uint32_t*)PLIC_ENABLE(hart)) & (~(1 << irq))));
+    if(irq < 32)
+    {
+        *(uint32_t*)PLIC_ENABLE(hart) = (((*(uint32_t*)PLIC_ENABLE(hart)) & (~(1 << irq))));
+    }
+    else
+    {
+        irq = irq - 32;
+        *(uint32_t*)PLIC_ENABLE(hart) = (((*(uint32_t*)PLIC_ENABLE(hart)) & (~(1 << irq))));
+    }
 }
-
 /*
 * PLIC will mask all interrupts of a priority less than or equal to threshold.
 * Maximum threshold is 7.
